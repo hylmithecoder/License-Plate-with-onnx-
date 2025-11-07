@@ -69,7 +69,7 @@ void ServerSide::uploadsRoute(SimpleApp& app){
 
 nlohmann::json ServerSide::showInferenceResult(const PlateResult& result){
     nlohmann::json response_data;
-    response_data["Pelat Nomor"] = result.plateText;
+    response_data["pelat_nomor"] = result.plateText;
 
     return response_data;
 }

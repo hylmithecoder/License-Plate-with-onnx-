@@ -75,27 +75,27 @@ void ReadCar::handleImage(){
 }
 
 #pragma region Handle white plate
-cv::Mat ReadCar::preprocessImage(const cv::Mat& image, const std::string& nameImage) {
-    cv::Mat gray, blurred, thresh, processed;
+Mat ReadCar::preprocessImage(const Mat& image, const std::string& nameImage) {
+    Mat gray, blurred, thresh, processed;
 
     // 1. Convert to grayscale
-    cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
-    cv::imwrite("output/step1_gray_" + nameImage, gray);
+    cvtColor(image, gray, COLOR_BGR2GRAY);
+    imwrite("output/step1_gray_" + nameImage, gray);
 
     // 2. Apply bilateral filter (mengurangi noise tapi tetap jaga edge)
-    cv::bilateralFilter(gray, blurred, 11, 17, 17);
-    cv::imwrite("output/step2_blurred_" + nameImage, blurred);
+    bilateralFilter(gray, blurred, 11, 17, 17);
+    imwrite("output/step2_blurred_" + nameImage, blurred);
 
     // 3. Apply adaptive threshold
-    cv::adaptiveThreshold(blurred, thresh, 255,
-                          cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-                          cv::THRESH_BINARY_INV, 21, 10);
-    cv::imwrite("output/step3_thresh_" + nameImage, thresh);
+    adaptiveThreshold(blurred, thresh, 255,
+                          ADAPTIVE_THRESH_GAUSSIAN_C,
+                          THRESH_BINARY_INV, 21, 10);
+    imwrite("output/step3_thresh_" + nameImage, thresh);
 
     // 4. Morphological operations untuk cleanup
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-    cv::morphologyEx(thresh, processed, cv::MORPH_CLOSE, kernel);
-    cv::imwrite("output/step4_morph_" + nameImage, processed);
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+    morphologyEx(thresh, processed, MORPH_CLOSE, kernel);
+    imwrite("output/step4_morph_" + nameImage, processed);
 
     return processed;
 }
@@ -138,7 +138,7 @@ bool ReadCar::validateIndonesianPlate(const string& text) {
     return regex_match(text, platePattern);
 }
 
-string ReadCar::performOCR(const cv::Mat& plateROI, float& confidence) {
+string ReadCar::performOCR(const Mat& plateROI, float& confidence) {
     if (plateROI.empty()) {
         confidence = 0.0f;
         return "UNRECOGNIZED";
@@ -152,11 +152,11 @@ string ReadCar::performOCR(const cv::Mat& plateROI, float& confidence) {
     string debug_suffix = to_string(timestamp);
 
     // Save original ROI
-    cv::imwrite("output/debug_original_" + debug_suffix + ".jpg", plateROI);
+    imwrite("output/debug_original_" + debug_suffix + ".jpg", plateROI);
     
     // Preprocess plate untuk OCR
-    cv::Mat processed = preprocessPlateForOCR(plateROI);
-    cv::imwrite("output/debug_processed_" + debug_suffix + ".jpg", processed);
+    Mat processed = preprocessPlateForOCR(plateROI);
+    imwrite("output/debug_processed_" + debug_suffix + ".jpg", processed);
     
     // Method 1: Default preprocessing
     ocr->SetPageSegMode(tesseract::PSM_SINGLE_LINE);
@@ -180,9 +180,9 @@ string ReadCar::performOCR(const cv::Mat& plateROI, float& confidence) {
         cout << "\n=== Trying Alternative Methods ===" << endl;
         
         // Method 2: Otsu threshold
-        cv::Mat binary2;
-        cv::threshold(processed, binary2, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-        cv::imwrite("output/debug_otsu_" + debug_suffix + ".jpg", binary2);
+        Mat binary2;
+        threshold(processed, binary2, 0, 255, THRESH_BINARY | THRESH_OTSU);
+        imwrite("output/debug_otsu_" + debug_suffix + ".jpg", binary2);
         
         ocr->SetImage(binary2.data, binary2.cols, binary2.rows, 1, binary2.step);
         outText = ocr->GetUTF8Text();
@@ -205,10 +205,10 @@ string ReadCar::performOCR(const cv::Mat& plateROI, float& confidence) {
         
         // Method 3: Inverted threshold if still low confidence
         if (confidence < 65.0f) {
-            cv::Mat inverted;
-            cv::bitwise_not(processed, inverted);
-            cv::threshold(inverted, inverted, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-            cv::imwrite("output/debug_inverted_" + debug_suffix + ".jpg", inverted);
+            Mat inverted;
+            bitwise_not(processed, inverted);
+            threshold(inverted, inverted, 0, 255, THRESH_BINARY | THRESH_OTSU);
+            imwrite("output/debug_inverted_" + debug_suffix + ".jpg", inverted);
             
             ocr->SetImage(inverted.data, inverted.cols, inverted.rows, 1, inverted.step);
             outText = ocr->GetUTF8Text();
@@ -239,20 +239,20 @@ string ReadCar::performOCR(const cv::Mat& plateROI, float& confidence) {
     return cleanedText;
 }
 
-bool ReadCar::validatePlateRegion(const cv::Rect& region, const cv::Mat& image) {
+bool ReadCar::validatePlateRegion(const Rect& region, const Mat& image) {
     if (region.width <= 0 || region.height <= 0) return false;
     if (region.x < 0 || region.y < 0) return false;
     if (region.x + region.width > image.cols) return false;
     if (region.y + region.height > image.rows) return false;
     
-    cv::Mat plateROI = image(region);
-    cv::Mat grayPlate;
-    cv::cvtColor(plateROI, grayPlate, cv::COLOR_BGR2GRAY);
+    Mat plateROI = image(region);
+    Mat grayPlate;
+    cvtColor(plateROI, grayPlate, COLOR_BGR2GRAY);
     
     // Hitung edge density (plat nomor harusnya punya banyak edge karena ada karakter)
-    cv::Mat edges;
-    cv::Canny(grayPlate, edges, 100, 200);
-    int edgeCount = cv::countNonZero(edges);
+    Mat edges;
+    Canny(grayPlate, edges, 100, 200);
+    int edgeCount = countNonZero(edges);
     double edgeDensity = (double)edgeCount / (region.width * region.height);
     
     // Plat nomor biasanya punya edge density 0.1 - 0.4
@@ -273,7 +273,7 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
     result.detected = false;
     result.confidence = 0.0f;
     
-    cv::Mat image = cv::imread(path, cv::IMREAD_COLOR);
+    Mat image = imread(path, IMREAD_COLOR);
     
     if (image.empty()) {
         cerr << "  ✗ Error: Could not load image!" << endl;
@@ -281,14 +281,30 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
     }
     
     // Resize jika terlalu besar
-    cv::Mat resized = image.clone();
+    Mat resized = image.clone();
     if (image.cols > 1280) {
         double scale = 1280.0 / image.cols;
-        cv::resize(image, resized, cv::Size(), scale, scale);
+        resize(image, resized, Size(), scale, scale);
     }
+
+    // Deteksi mobil dengan save debug image
+    float carProbability = detectCar(image, true);
     
+    if (carProbability > 50.0f) {
+        cout << "HIGH CONFIDENCE: Vehicle detected with " 
+             << carProbability << "% probability" << endl;
+        
+        // Lanjut ke deteksi plat nomor
+        // ... your existing plate detection code ...
+    } else if (carProbability > 0.0f) {
+        cout << "LOW CONFIDENCE: Possible vehicle with " 
+             << carProbability << "% probability" << endl;
+    } else {
+        cout << "NO VEHICLE DETECTED in the image" << endl;
+    }
+
     // Detect candidates
-    vector<cv::Rect> candidates = detectPlateCandidates(resized, result.filename);
+    vector<Rect> candidates = detectPlateCandidates(resized, result.filename);
     cout << "  → Found " << candidates.size() << " plate candidate(s)" << endl;
     
     if (candidates.empty()) {
@@ -296,19 +312,19 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
         
         string filename = fs::path(path).stem().string();
         string outputPath = "output/no_plate_" + filename + ".jpg";
-        cv::imwrite(outputPath, image);
+        imwrite(outputPath, image);
         return result;
     }
     
     // Get best plate
-    cv::Rect bestPlate = filterBestPlate(candidates, resized);
+    Rect bestPlate = filterBestPlate(candidates, resized);
     
     if (bestPlate.width == 0) {
         cout << "  ✗ No valid plate found" << endl;
         plateText = "UNRECOGNIZED";
         string filename = fs::path(path).stem().string();
         string outputPath = "output/no_plate_" + filename + ".jpg";
-        cv::imwrite(outputPath, image);
+        imwrite(outputPath, image);
         return result;
     }
     
@@ -322,7 +338,7 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
     }
     
     // Crop plate
-    cv::Mat plateROI = image(bestPlate);
+    Mat plateROI = image(bestPlate);
     
     // Perform OCR
     float confidence;
@@ -346,9 +362,9 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
     bool isValid = validateIndonesianPlate(plateText);
     
     // Draw result
-    cv::Mat output = image.clone();
-    cv::Scalar color = isValid ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 165, 255); // Green or Orange
-    cv::rectangle(output, bestPlate, color, 3);
+    Mat output = image.clone();
+    Scalar color = isValid ? Scalar(0, 255, 0) : Scalar(0, 165, 255); // Green or Orange
+    rectangle(output, bestPlate, color, 3);
     
     // Add text dengan background
     string displayText = plateText.empty() ? "UNREADABLE" : plateText;
@@ -358,19 +374,19 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
     int baseline = 0;
     double fontScale = 0.8;
     int thickness = 2;
-    cv::Size textSize = cv::getTextSize(displayText, cv::FONT_HERSHEY_SIMPLEX, 
+    Size textSize = getTextSize(displayText, FONT_HERSHEY_SIMPLEX, 
                                          fontScale, thickness, &baseline);
     
-    cv::Point textOrg(bestPlate.x, bestPlate.y - 15);
+    Point textOrg(bestPlate.x, bestPlate.y - 15);
     
     // Background
-    cv::rectangle(output,
-                  textOrg + cv::Point(0, baseline + 5),
-                  textOrg + cv::Point(textSize.width, -textSize.height - 5),
-                  color, cv::FILLED);
+    rectangle(output,
+                  textOrg + Point(0, baseline + 5),
+                  textOrg + Point(textSize.width, -textSize.height - 5),
+                  color, FILLED);
     
-    cv::putText(output, displayText, textOrg, cv::FONT_HERSHEY_SIMPLEX, 
-                fontScale, cv::Scalar(0, 0, 0), thickness);
+    putText(output, displayText, textOrg, FONT_HERSHEY_SIMPLEX, 
+                fontScale, Scalar(0, 0, 0), thickness);
     
     // Save hasil
     string filename = fs::path(path).stem().string();
@@ -378,12 +394,12 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
     string outputCrop = "output/plate_" + filename + ".jpg";
     string outputProcessed = "output/processed_" + filename + ".jpg";
     
-    cv::imwrite(outputFull, output);
-    cv::imwrite(outputCrop, plateROI);
+    imwrite(outputFull, output);
+    imwrite(outputCrop, plateROI);
     
     // Save preprocessed version
-    cv::Mat processedPlate = preprocessPlateForOCR(plateROI);
-    cv::imwrite(outputProcessed, processedPlate);
+    Mat processedPlate = preprocessPlateForOCR(plateROI);
+    imwrite(outputProcessed, processedPlate);
     
     cout << "  ✓ Plate detected!" << endl;
     cout << "    Type: " << plateType << " PLATE" << endl;
@@ -470,21 +486,21 @@ void ReadCar::detectAndSavePlate(const string& path) {
 }
 
 void ReadCar::analyzeImage(string path){
-    cv::Mat image = cv::imread(path, cv::IMREAD_COLOR);
+    Mat image = imread(path, IMREAD_COLOR);
 
     if (image.empty()) {
         cerr << "Error: Could not open or find the image." << endl;
         return;
     }
 
-    cv::Mat gray_image, blurred_image, edges;
-    cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(gray_image, blurred_image, cv::Size(5, 5), 0);
-    cv::Canny(blurred_image, edges, 100, 200);
+    Mat gray_image, blurred_image, edges;
+    cvtColor(image, gray_image, COLOR_BGR2GRAY);
+    GaussianBlur(gray_image, blurred_image, Size(5, 5), 0);
+    Canny(blurred_image, edges, 100, 200);
 
-    cv::imshow("Grayscale Image", gray_image);
-    cv::imshow("Canny Edges", edges);
-    cv::waitKey(0);
+    imshow("Grayscale Image", gray_image);
+    imshow("Canny Edges", edges);
+    waitKey(0);
 }
 
 bool ReadCar::isRectangle(const string& path) {
@@ -494,7 +510,7 @@ bool ReadCar::isRectangle(const string& path) {
 }
 
 #pragma region Handle Black plate
-bool ReadCar::isBlackPlate(const cv::Rect& region, const cv::Mat& image) {
+bool ReadCar::isBlackPlate(const Rect& region, const Mat& image) {
     // Safety check
     if (region.x < 0 || region.y < 0 || 
         region.x + region.width > image.cols || 
@@ -502,17 +518,17 @@ bool ReadCar::isBlackPlate(const cv::Rect& region, const cv::Mat& image) {
         return false;
     }
     
-    cv::Mat plateROI = image(region);
-    cv::Mat grayPlate;
+    Mat plateROI = image(region);
+    Mat grayPlate;
     
     if (plateROI.channels() == 3) {
-        cv::cvtColor(plateROI, grayPlate, cv::COLOR_BGR2GRAY);
+        cvtColor(plateROI, grayPlate, COLOR_BGR2GRAY);
     } else {
         grayPlate = plateROI.clone();
     }
     
     // Hitung mean brightness
-    cv::Scalar meanBrightness = cv::mean(grayPlate);
+    Scalar meanBrightness = mean(grayPlate);
     double avgBrightness = meanBrightness[0];
     
     // Plat hitam biasanya punya average brightness < 80
@@ -522,11 +538,11 @@ bool ReadCar::isBlackPlate(const cv::Rect& region, const cv::Mat& image) {
     if (isDark) {
         // Double check: plat hitam harus punya text putih/terang
         // Cek histogram untuk memastikan ada pixel terang
-        cv::Mat hist;
+        Mat hist;
         int histSize = 256;
         float range[] = {0, 256};
         const float* histRange = {range};
-        cv::calcHist(&grayPlate, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange);
+        calcHist(&grayPlate, 1, 0, Mat(), hist, 1, &histSize, &histRange);
         
         // Hitung jumlah pixel terang (> 180)
         int brightPixels = 0;
@@ -543,50 +559,50 @@ bool ReadCar::isBlackPlate(const cv::Rect& region, const cv::Mat& image) {
     return false;
 }
 
-cv::Mat ReadCar::preprocessForBlackPlate(const cv::Mat& image, string nameImage) {
-    cv::Mat gray, blurred, processed;
+Mat ReadCar::preprocessForBlackPlate(const Mat& image, string nameImage) {
+    Mat gray, blurred, processed;
     
     // Convert to grayscale
-    cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
-    cv::imwrite("output/step1_gray_black_" + nameImage, gray);
+    cvtColor(image, gray, COLOR_BGR2GRAY);
+    imwrite("output/step1_gray_black_" + nameImage, gray);
     
     // Bilateral filter
-    cv::bilateralFilter(gray, blurred, 11, 17, 17);    
-    cv::imwrite("output/step2_blurred_black_" + nameImage, blurred);
+    bilateralFilter(gray, blurred, 11, 17, 17);    
+    imwrite("output/step2_blurred_black_" + nameImage, blurred);
 
     // Untuk plat HITAM: gunakan THRESH_BINARY (bukan INV)
     // Karena kita cari text PUTIH di background HITAM
-    cv::adaptiveThreshold(blurred, processed, 255,
-                          cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-                          cv::THRESH_BINARY, 21, 10); // BINARY, bukan BINARY_INV    
-    // cv::imwrite("output/step3_thresh_black_" + nameImage, blurred);
+    adaptiveThreshold(blurred, processed, 255,
+                          ADAPTIVE_THRESH_GAUSSIAN_C,
+                          THRESH_BINARY, 21, 10); // BINARY, bukan BINARY_INV    
+    // imwrite("output/step3_thresh_black_" + nameImage, blurred);
 
     // Morphological operations
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-    cv::morphologyEx(processed, processed, cv::MORPH_CLOSE, kernel);
-    cv::imwrite("output/step3_morph_black_" + nameImage, processed);
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+    morphologyEx(processed, processed, MORPH_CLOSE, kernel);
+    imwrite("output/step3_morph_black_" + nameImage, processed);
     
     return processed;
 }
 
-vector<cv::Rect> ReadCar::detectBlackPlateCandidates(const cv::Mat& image, string nameImage) {
-    cv::Mat processed = preprocessForBlackPlate(image, nameImage);
+vector<Rect> ReadCar::detectBlackPlateCandidates(const Mat& image, string nameImage) {
+    Mat processed = preprocessForBlackPlate(image, nameImage);
     
-    vector<vector<cv::Point>> contours;
-    cv::findContours(processed, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+    vector<vector<Point>> contours;
+    findContours(processed, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
     
-    vector<cv::Rect> candidates;
+    vector<Rect> candidates;
     
     for (const auto& contour : contours) {
-        double area = cv::contourArea(contour);
+        double area = contourArea(contour);
         if (area < 500) continue;
         
-        double perimeter = cv::arcLength(contour, true);
-        vector<cv::Point> approx;
-        cv::approxPolyDP(contour, approx, 0.018 * perimeter, true);
+        double perimeter = arcLength(contour, true);
+        vector<Point> approx;
+        approxPolyDP(contour, approx, 0.018 * perimeter, true);
         
         if (approx.size() >= 4 && approx.size() <= 6) {
-            cv::Rect boundRect = cv::boundingRect(approx);
+            Rect boundRect = boundingRect(approx);
             double aspectRatio = (double)boundRect.width / boundRect.height;
             
             if (aspectRatio > 2.0 && aspectRatio < 6.5) {
@@ -605,4 +621,211 @@ vector<cv::Rect> ReadCar::detectBlackPlateCandidates(const cv::Mat& image, strin
     return candidates;
 }
 
+#pragma endregion
+
+#pragma region Handle Car
+float ReadCar::detectCar(const Mat& frame, bool saveDebug) {
+    // Muat model MobileNet SSD (COCO trained)
+    static dnn::Net net;
+    static bool modelLoaded = false;
+    
+    if (!modelLoaded) {
+        cout << "Loading car detection model..." << endl;
+        net = dnn::readNetFromONNX("models/object_detection_yolox_2022nov.onnx");
+        
+        if (net.empty()) {
+            cerr << "ERROR: Failed to load model!" << endl;
+            return 0.0f;
+        }
+        
+        // Set backend dan target untuk performa optimal
+        net.setPreferableBackend(dnn::DNN_BACKEND_OPENCV);
+        net.setPreferableTarget(dnn::DNN_TARGET_CPU);
+        
+        modelLoaded = true;
+        cout << "Model loaded successfully!" << endl;
+    }
+
+    if (frame.empty()) {
+        cerr << "ERROR: Empty frame for car detection!" << endl;
+        return 0.0f;
+    }
+
+    // Class names untuk COCO dataset
+    map<int, string> classNames = {
+        {2, "car"},
+        {3, "motorcycle"},
+        {5, "bus"},
+        {7, "truck"}
+    };
+
+    // Preprocess image
+    Mat blob = dnn::blobFromImage(frame, 1/255.0, Size(640, 640),
+                              Scalar(0, 0, 0), true, false);
+
+    net.setInput(blob);
+
+    // Forward pass
+    auto startTime = chrono::high_resolution_clock::now();
+    Mat output = net.forward();
+    auto endTime = chrono::high_resolution_clock::now();
+    
+    auto duration = chrono::duration_cast<chrono::milliseconds>(endTime - startTime);
+    cout << "Detection inference time: " << duration.count() << " ms" << endl;
+
+    // Debug output shape
+    cout << "Output dimensions: ";
+    for (int i = 0; i < output.dims; i++) {
+        cout << output.size[i] << " ";
+    }
+    cout << endl;
+
+    // Parse detections - PERBAIKAN DI SINI
+    // Output biasanya berbentuk [1, 1, N, 7] atau [1, N, 7]
+    int numDetections = output.size[2];
+    float* data = (float*)output.data;
+    
+    vector<CarDetection> carDetections;
+    float highestConf = 0.0f;
+    CarDetection bestDetection;
+
+    int frameHeight = frame.rows;
+    int frameWidth = frame.cols;
+
+    cout << "\n=== CAR DETECTION RESULTS ===" << endl;
+    cout << "Total detections found: " << numDetections << endl;
+
+    for (int i = 0; i < numDetections; i++) {
+        // Setiap deteksi punya 7 elemen: [batchId, classId, confidence, x1, y1, x2, y2]
+        int offset = i * 7;
+        
+        float batchId = data[offset + 0];
+        int classId = (int)data[offset + 1];
+        float confidence = data[offset + 2];
+        float x1 = data[offset + 3];
+        float y1 = data[offset + 4];
+        float x2 = data[offset + 5];
+        float y2 = data[offset + 6];
+
+        // Filter: hanya vehicle classes dan confidence > threshold
+        if (classNames.find(classId) != classNames.end() && confidence > 0.3f) {
+            // Convert normalized coordinates ke pixel coordinates
+            x1 *= frameWidth;
+            y1 *= frameHeight;
+            x2 *= frameWidth;
+            y2 *= frameHeight;
+
+            // Pastikan koordinat dalam bounds
+            x1 = max(0.0f, min(x1, (float)frameWidth - 1));
+            y1 = max(0.0f, min(y1, (float)frameHeight - 1));
+            x2 = max(0.0f, min(x2, (float)frameWidth));
+            y2 = max(0.0f, min(y2, (float)frameHeight));
+
+            // Pastikan x2 > x1 dan y2 > y1
+            if (x2 <= x1 || y2 <= y1) continue;
+
+            Rect bbox(Point((int)x1, (int)y1), Point((int)x2, (int)y2));
+
+            CarDetection detection;
+            detection.classId = classId;
+            detection.className = classNames[classId];
+            detection.confidence = confidence;
+            detection.bbox = bbox;
+
+            carDetections.push_back(detection);
+
+            cout << "  [" << i << "] " << detection.className 
+                 << " | Confidence: " << fixed << setprecision(2) 
+                 << (confidence * 100.0f) << "%" 
+                 << " | BBox: (" << bbox.x << "," << bbox.y << "," 
+                 << bbox.width << "x" << bbox.height << ")" << endl;
+
+            // Track detection dengan confidence tertinggi
+            if (confidence > highestConf) {
+                highestConf = confidence;
+                bestDetection = detection;
+            }
+        }
+    }
+
+    // Output hasil
+    if (highestConf > 0.0f) {
+        cout << "\n✓ VEHICLE DETECTED!" << endl;
+        cout << "  Type: " << bestDetection.className << endl;
+        cout << "  Confidence: " << fixed << setprecision(2) 
+             << (highestConf * 100.0f) << "%" << endl;
+        cout << "  Total vehicles found: " << carDetections.size() << endl;
+    } else {
+        cout << "\n✗ NO VEHICLE DETECTED" << endl;
+    }
+
+    // Save debug image jika diminta
+    if (saveDebug && !carDetections.empty()) {
+        Mat debugFrame = frame.clone();
+        
+        // Gambar semua deteksi
+        for (const auto& det : carDetections) {
+            // Warna berbeda untuk setiap class
+            Scalar color;
+            if (det.classId == 2) color = Scalar(0, 255, 0);      // car - hijau
+            else if (det.classId == 3) color = Scalar(255, 0, 0); // motorcycle - biru
+            else if (det.classId == 5) color = Scalar(0, 165, 255); // bus - orange
+            else if (det.classId == 7) color = Scalar(0, 0, 255); // truck - merah
+
+            // Gambar bounding box
+            rectangle(debugFrame, det.bbox, color, 3);
+
+            // Label background
+            string label = det.className + " " + 
+                          to_string((int)(det.confidence * 100)) + "%";
+            int baseline;
+            Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 
+                                         0.8, 2, &baseline);
+            
+            Point labelPos(det.bbox.x, det.bbox.y - 10);
+            if (labelPos.y < labelSize.height) labelPos.y = det.bbox.y + labelSize.height;
+
+            // Background untuk text
+            rectangle(debugFrame, 
+                     Point(labelPos.x, labelPos.y - labelSize.height - baseline),
+                     Point(labelPos.x + labelSize.width, labelPos.y + baseline),
+                     color, FILLED);
+
+            // Text
+            putText(debugFrame, label, labelPos, 
+                   FONT_HERSHEY_SIMPLEX, 0.8, Scalar(255, 255, 255), 2);
+        }
+
+        // Tambahkan info summary di pojok kiri atas
+        string summaryText = "Vehicles: " + to_string(carDetections.size()) + 
+                            " | Best: " + bestDetection.className + " " +
+                            to_string((int)(highestConf * 100)) + "%";
+        
+        rectangle(debugFrame, Point(5, 5), Point(600, 45), 
+                 Scalar(0, 0, 0), FILLED);
+        putText(debugFrame, summaryText, Point(10, 30), 
+               FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 255, 0), 2);
+
+        // Save dengan timestamp
+        time_t now = time(0);
+        tm* ltm = localtime(&now);
+        char timestamp[50];
+        strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", ltm);
+
+        string filename = "found_car_" + string(timestamp) + "_" + 
+                         bestDetection.className + "_" + 
+                         to_string((int)(highestConf * 100)) + "pct.jpg";
+        
+        bool success = imwrite(filename, debugFrame);
+        if (success) {
+            cout << "\n→ Debug image saved: " << filename << endl;
+        } else {
+            cerr << "ERROR: Failed to save debug image!" << endl;
+        }
+    }
+
+    cout << "==============================\n" << endl;
+
+    return highestConf * 100.0f; // return probability dalam persen
+}
 #pragma endregion

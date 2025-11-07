@@ -1,3 +1,6 @@
+#ifndef SERVERSIDE_HPP
+#define SERVERSIDE_HPP
+
 #pragma once
 #include <crow.h>
 #include <crow/json.h>
@@ -23,3 +26,4 @@ class ServerSide{
         void response(SimpleApp& app);
         void uploadsRoute(SimpleApp& app);
 };
+#endif // SERVERSIDE_HPP

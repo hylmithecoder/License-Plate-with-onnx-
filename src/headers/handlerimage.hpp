@@ -37,61 +37,69 @@ struct Detection {
     int classId;
 };
 
+struct CarDetection {
+    int classId;
+    string className;
+    float confidence;
+    Rect bbox;
+};
+
 class ReadCar {
-private:
-    vector<string> listImage;
-    vector<PlateResult> results;
-    tesseract::TessBaseAPI* ocr;
+    private:
+        vector<string> listImage;
+        vector<PlateResult> results;
+        tesseract::TessBaseAPI* ocr;
 
-    unique_ptr<Ort::Env> onnxEnv;
-    unique_ptr<Ort::Session> onnxSession;
-    Ort::SessionOptions sessionOptions;
-    vector<int64_t> inputShape;
-    string modelPath = "models/license-plate-finetune-v1m.onnx";
-    bool modelLoaded;
-    
-    // Helper functions
-    cv::Mat preprocessImage(const cv::Mat& image, const string& nameImage);
-    cv::Mat preprocessPlateForOCR(const cv::Mat& plateROI);
-    vector<cv::Rect> detectPlateCandidates(const cv::Mat& image, string nameImage);
-    cv::Rect filterBestPlate(const vector<cv::Rect>& candidates, const cv::Mat& image);
-    bool validatePlateRegion(const cv::Rect& region, const cv::Mat& image);
+        unique_ptr<Ort::Env> onnxEnv;
+        unique_ptr<Ort::Session> onnxSession;
+        Ort::SessionOptions sessionOptions;
+        vector<int64_t> inputShape;
+        string modelPath = "models/license-plate-finetune-v1m.onnx";
+        bool modelLoaded;
+        
+        // Helper functions
+        cv::Mat preprocessImage(const cv::Mat& image, const string& nameImage);
+        cv::Mat preprocessPlateForOCR(const cv::Mat& plateROI);
+        vector<cv::Rect> detectPlateCandidates(const cv::Mat& image, string nameImage);
+        cv::Rect filterBestPlate(const vector<cv::Rect>& candidates, const cv::Mat& image);
+        bool validatePlateRegion(const cv::Rect& region, const cv::Mat& image);
 
-    // Black plate function
-    bool isBlackPlate(const cv::Rect& region, const cv::Mat& image);
-    cv::Mat preprocessForBlackPlate(const cv::Mat& image, string nameImage);
-    vector<cv::Rect> detectBlackPlateCandidates(const cv::Mat& image, string nameImage);
-    
-    // ONNX Model functions
-    bool loadONNXModel(const string& path);
-    vector<Detection> detectWithONNX(const cv::Mat& image, const string& currentNameImage);
-    vector<Detection> postprocessYOLO(const string& currentNameImage, const vector<Ort::Value>& outputs, const Mat& originalImage, const cv::Size& imgSize, float confThreshold = 0.25, float iouThreshold = 0.45);
-    void drawDetections(const cv::Mat& image, const vector<Detection>& detections);
+        // Black plate function
+        bool isBlackPlate(const cv::Rect& region, const cv::Mat& image);
+        cv::Mat preprocessForBlackPlate(const cv::Mat& image, string nameImage);
+        vector<cv::Rect> detectBlackPlateCandidates(const cv::Mat& image, string nameImage);
+        
+        // ONNX Model functions
+        bool loadONNXModel(const string& path);
+        vector<Detection> detectWithONNX(const cv::Mat& image, const string& currentNameImage);
+        vector<Detection> postprocessYOLO(const string& currentNameImage, const vector<Ort::Value>& outputs, const Mat& originalImage, const cv::Size& imgSize, float confThreshold = 0.25, float iouThreshold = 0.45);
+        void drawDetections(const cv::Mat& image, const vector<Detection>& detections);
 
-    // OCR functions
-    string performOCR(const cv::Mat& plateROI, float& confidence);
-    string cleanPlateText(const string& rawText);
-    bool validateIndonesianPlate(const string& text);
-    Mat repairCharacters(const cv::Mat& binaryInput, const std::string& currentNameImage);
+        // OCR functions
+        string performOCR(const cv::Mat& plateROI, float& confidence);
+        string cleanPlateText(const string& rawText);
+        bool validateIndonesianPlate(const string& text);
+        Mat repairCharacters(const cv::Mat& binaryInput, const std::string& currentNameImage);
 
-    
-public:
-    ReadCar();
-    ~ReadCar();
-    void initModel(const string& nameModel);
+        // Handler detect car
+        float detectCar(const Mat& image, bool saveDebug = true);
+    public:
+        ReadCar();
+        ~ReadCar();
+        void initModel(const string& nameModel);
 
-    void readImage(string path);
-    void handleImage();
-    void analyzeImage(string path);
-    bool isRectangle(const string& path);
-    void detectAndSavePlate(const string& path);
-    PlateResult detectPlateWithOCR(const string& path);
+        void readImage(string path);
+        void handleImage();
+        void analyzeImage(string path);
+        bool isRectangle(const string& path);
+        void detectAndSavePlate(const string& path);
+        PlateResult detectPlateWithOCR(const string& path);
 
-    // New OCR methods
-    void exportResultsToCSV(const string& outputPath = "output/results.csv");
-    void printResults();
+        // New OCR methods
+        void exportResultsToCSV(const string& outputPath = "output/results.csv");
+        void printResults();
 
-    void showSpecificationModel();
+        void showSpecificationModel();
 
 };
 
