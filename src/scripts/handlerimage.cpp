@@ -158,6 +158,9 @@ string ReadCar::performOCR(const Mat& plateROI, float& confidence) {
     Mat processed = preprocessPlateForOCR(plateROI);
     imwrite("output/debug_processed_" + debug_suffix + ".jpg", processed);
     
+    string readText = lastRecognizePlate(plateROI);
+    cout << "Initial OCR Text: " << readText << endl;
+
     // Method 1: Default preprocessing
     ocr->SetPageSegMode(tesseract::PSM_SINGLE_LINE);
     ocr->SetImage(processed.data, processed.cols, processed.rows, 
@@ -236,7 +239,7 @@ string ReadCar::performOCR(const Mat& plateROI, float& confidence) {
     cout << "Confidence: " << confidence << "%" << endl;
     cout << "Debug images saved with suffix: " << debug_suffix << endl;
     
-    return cleanedText;
+    return readText;
 }
 
 bool ReadCar::validatePlateRegion(const Rect& region, const Mat& image) {
@@ -342,12 +345,12 @@ PlateResult ReadCar::detectPlateWithOCR(const string& path) {
     
     // Perform OCR
     float confidence;
-    if (performOCR(plateROI, confidence).empty()) {
-        cout << "  ✗ OCR failed to read plate" << endl;
-        plateText = "UNRECOGNIZED";
-    } else {
+    // if (performOCR(plateROI, confidence).empty()) {
+    //     cout << "  ✗ OCR failed to read plate" << endl;
+    //     plateText = "UNRECOGNIZED";
+    // } else {
         plateText = performOCR(plateROI, confidence);
-    }
+    // }
 
     bool isBlack = isBlackPlate(bestPlate, image);
     string plateType = isBlack ? "BLACK" : "WHITE";
@@ -829,3 +832,234 @@ float ReadCar::detectCar(const Mat& frame, bool saveDebug) {
     return highestConf * 100.0f; // return probability dalam persen
 }
 #pragma endregion
+string ReadCar::lastRecognizePlate(const Mat& plateImage) {
+            // 1. Straighten and preprocess
+    Mat straightened = straightenPlate(plateImage);
+    
+    if (straightened.empty()) {
+        return "";
+    }
+    
+    // 2. Run Tesseract
+    TessBaseAPI *api = new TessBaseAPI();
+    
+    // Initialize with English (for Indonesian plates)
+    
+    OcrEngineMode typeTesseract = OEM_LSTM_ONLY;
+    if (api->Init(NULL, "eng", typeTesseract)) {
+        cerr << "Could not initialize tesseract." << endl;
+        delete api;
+        return "";
+    }
+    
+    // Set page segmentation mode untuk single line text
+    api->SetPageSegMode(PSM_SINGLE_LINE);
+    
+    // Whitelist characters (Indonesian plates: A-Z, 0-9)
+    api->SetVariable("tessedit_char_whitelist", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    
+    // Set image
+    // cout << "Straightend data:  " << straightened.data << endl;
+    cout << "Straightend cols:   " << straightened.cols << endl;
+    cout << "Straightend rows:   " << straightened.rows << endl;
+    cout << "Straightend channels: " << straightened.channels() << endl;
+    cout << "Straightend step:   " << straightened.step1() << endl;
+    api->SetImage(straightened.data, straightened.cols, straightened.rows, 
+                straightened.channels(), straightened.step1());
+    
+    // Get OCR result
+    char* outText = api->GetUTF8Text();
+    cout << "OCR result: " << outText << endl;
+    string result = string(outText);
+    
+    // Clean up
+    delete[] outText;
+    api->End();
+    delete api;
+    
+    // Post-processing
+    // Remove whitespace and non-alphanumeric
+    result.erase(remove_if(result.begin(), result.end(), 
+                        [](char c) { return !isalnum(c); }), 
+                result.end());
+    
+    // Convert to uppercase
+    transform(result.begin(), result.end(), result.begin(), ::toupper);
+    
+    return result;
+}
+
+Mat ReadCar::straightenPlate(const Mat& input) {
+    Mat gray, thresh;
+    
+    // Convert to grayscale
+    cvtColor(input, gray, COLOR_BGR2GRAY);
+    
+    // Apply adaptive thresholding
+    adaptiveThreshold(gray, thresh, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 11, 2);
+    string currentNamefile = "debug_thresh.jpg";
+    imwrite("debug/"+currentNamefile, thresh);
+    // Find contours
+    vector<vector<Point>> contours;
+    findContours(thresh, contours, RETR_LIST, CHAIN_APPROX_SIMPLE);
+    cout << "Countours size: " << contours.size() << endl;
+    // Find the largest contour that could be a license plate
+    vector<Point> plateContour;
+    double maxArea = 0;
+    
+    // for (const auto& contour : contours) {
+    //     double area = contourArea(contour);
+    //     if (area > 200) { // Minimal area threshold
+    //         RotatedRect rect = minAreaRect(contour);
+    //         double aspectRatio = rect.size.width / rect.size.height;
+            
+    //         // Typical license plate aspect ratio is between 2 and 5
+    //         if (aspectRatio > 2 && aspectRatio < 5) {
+    //             if (area > maxArea) {
+    //                 maxArea = area;
+    //                 plateContour = contour;
+    //             }
+    //         }
+    //     }
+    // }
+
+    for (const auto& contour : contours) {
+        double area = contourArea(contour);
+        if (area > maxArea) {
+            maxArea = area;
+            plateContour = contour;
+        }
+    }
+    
+    if (plateContour.empty()) {
+        return input;
+    }
+
+    cout << "PLate contour size: " << plateContour.size() << endl;
+    
+    // Get rotated rectangle
+    RotatedRect rotatedRect = minAreaRect(plateContour);
+    Point2f vertices[4];
+    rotatedRect.points(vertices);
+
+    // Sort points to get proper order: TL, TR, BR, BL
+    vector<Point2f> srcPts(vertices, vertices + 4);
+    vector<Point2f> dstPts = {
+        Point2f(0, 0),                          // Top-Left
+        Point2f(rotatedRect.size.width, 0),     // Top-Right
+        Point2f(rotatedRect.size.width, rotatedRect.size.height), // Bottom-Right
+        Point2f(0, rotatedRect.size.height)     // Bottom-Left
+    };
+
+    // Sort source points
+    sort(srcPts.begin(), srcPts.end(), [](const Point2f& a, const Point2f& b) {
+        return a.y < b.y;
+    });
+
+    // Split top and bottom points
+    vector<Point2f> top(srcPts.begin(), srcPts.begin() + 2);
+    vector<Point2f> bottom(srcPts.begin() + 2, srcPts.end());
+
+    // Sort top points by x
+    sort(top.begin(), top.end(), [](const Point2f& a, const Point2f& b) {
+        return a.x < b.x;
+    });
+
+    // Sort bottom points by x
+    sort(bottom.begin(), bottom.end(), [](const Point2f& a, const Point2f& b) {
+        return a.x < b.x;
+    });
+
+    // Combine points in correct order
+    srcPts = {top[0], top[1], bottom[1], bottom[0]};
+
+    // Draw debug visualization
+    Mat debugDraw = input.clone();
+    for (int i = 0; i < 4; i++) {
+        circle(debugDraw, srcPts[i], 5, Scalar(0, 0, 255), -1);
+        line(debugDraw, srcPts[i], srcPts[(i+1)%4], Scalar(0, 255, 0), 2);
+    }
+
+    // Calculate perspective transform
+    Mat perspectiveMatrix = getPerspectiveTransform(srcPts, dstPts);
+    
+    // Apply perspective transform
+    Mat warped;
+    warpPerspective(input, warped, perspectiveMatrix, 
+                Size(rotatedRect.size.width, rotatedRect.size.height));
+
+    resize(warped, warped, Size(warped.cols * 5.6, warped.rows));
+    // Save debug output
+
+    // --- [Tambahan untuk lurusin jajar genjang] ---
+    Mat graypar, threshpar;
+    cvtColor(warped, graypar, COLOR_BGR2GRAY);
+    threshold(graypar, threshpar, 0, 255, THRESH_BINARY | THRESH_OTSU);
+
+    vector<vector<Point>> contourspar;
+    findContours(threshpar, contourspar, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    if (!contourspar.empty()) {
+        // Ambil contour terbesar
+        size_t largestIdx = 0;
+        double maxArea = 0;
+        for (size_t i = 0; i < contourspar.size(); i++) {
+            double area = contourArea(contourspar[i]);
+            if (area > maxArea) {
+                maxArea = area;
+                largestIdx = i;
+            }
+        }
+
+        RotatedRect rect = minAreaRect(contourspar[largestIdx]);
+
+        // Buat matrix transform baru untuk ngeratain plat (deskew)
+        Mat M = getRotationMatrix2D(rect.center, rect.angle, 1.0);
+        Mat deskewed;
+        warpAffine(warped, deskewed, M, warped.size(), INTER_CUBIC);
+
+
+        warped = deskewed; // opsional, biar lanjut ke OCR pakai hasil lurus
+    } else {
+    }
+
+    // return warped;
+    
+    // Get angle and size
+    float angle = rotatedRect.angle;
+    Size rect_size = rotatedRect.size;
+    
+    // Ensure width is larger than height
+    if (rect_size.width < rect_size.height) {
+        swap(rect_size.width, rect_size.height);
+        angle += 90.0;
+    }
+    
+    // Get rotation matrix
+    Mat rotationMatrix = getRotationMatrix2D(rotatedRect.center, angle, 1.0);
+    
+    // Rotate the image
+    Mat rotated;
+    warpAffine(input, rotated, rotationMatrix, input.size(), INTER_CUBIC);
+    
+    // Crop the plate region
+    Rect bbox = rotatedRect.boundingRect();
+    bbox.x = max(bbox.x, 0);
+    bbox.y = max(bbox.y, 0);
+    bbox.width = min(bbox.width, input.cols - bbox.x);
+    bbox.height = min(bbox.height, input.rows - bbox.y);
+    
+    Mat cropped = rotated(bbox);
+    
+    // Resize to standard size for better OCR
+    Mat resized;
+    resize(cropped, resized, Size(400, 100));
+
+    if (!fs::exists("debug")) {
+        fs::create_directory("debug");
+    }
+
+    imwrite("debug/debug_resized.jpg", resized);
+
+    return resized;
+}

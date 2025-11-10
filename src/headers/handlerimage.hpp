@@ -19,6 +19,7 @@ namespace fs = std::filesystem;
 using namespace std;
 using namespace cv;
 using namespace cv::dnn;
+using namespace tesseract;
 
 struct PlateResult {
     string filename;
@@ -83,6 +84,9 @@ class ReadCar {
 
         // Handler detect car
         float detectCar(const Mat& image, bool saveDebug = true);
+        string lastRecognizePlate(const Mat& image);
+        Mat straightenPlate(const Mat& input);
+        
     public:
         ReadCar();
         ~ReadCar();
